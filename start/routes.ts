@@ -14,6 +14,8 @@ router
       router.get("user", [UsersController, "index"]);
       router.get("user/:id", [UsersController, "show"]);
       router.post("user", [UsersController, "store"]);
+      router.delete("user/:id", [UsersController, "destroy"]);
+      router.put("user/:id", [UsersController, "update"]);
     })
   })
   .prefix('/api/v1')

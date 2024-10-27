@@ -21,7 +21,6 @@ export default class UsersController {
    * Handle form submission for the create action
    */
   async store({ request, response }: HttpContext) {
-    
     try {
       const data = request.only(['first_name', 'last_name', 'email', 'password', 'rol', 'cart'])
 
@@ -42,7 +41,7 @@ export default class UsersController {
           token: {
             type: 'bearer',
             value: token.value!.release(),
-          }
+          },
         })
       }
       return response.status(409).json({ message: 'El correo electrónico ya está en uso' })
@@ -100,8 +99,12 @@ export default class UsersController {
   async destroy({ params, response }: HttpContext) {
     try {
       const userData = await User.findOrFail(params.id)
-      await userData.delete()
-      return response.status(200).send("Usuario eliminado")
+      if (userData) {
+        userData.delete()
+        return response.status(200).send('Usuario eliminado')
+      } else {
+        return response.badRequest({ message: "no existe el usuario"})
+      }
     } catch (error) {
       console.error(error)
       return response.status(500).json({ message: 'Error al eliminar el usuario' })
