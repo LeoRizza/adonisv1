@@ -20,7 +20,7 @@ export default class UsersController {
   /**
    * Handle form submission for the create action
    */
-  async store({ request, response }: HttpContext) {
+  async store({ request, response, auth }: HttpContext) {
     try {
       const data = request.only(['first_name', 'last_name', 'email', 'password', 'rol', 'cart'])
 
@@ -32,6 +32,10 @@ export default class UsersController {
 
         const hashedPassword = await hash.make(data.password)
         data.password = hashedPassword
+
+        if (!auth.user || auth.user.rol !== 'god') {
+          data.rol = 'user'
+        }
 
         const user = await User.create(data)
         const token = await User.accessTokens.create(user)
@@ -67,14 +71,15 @@ export default class UsersController {
   /**
    * Handle form submission for the edit action
    */
-  async update({ params, request, response }: HttpContext) {
+  async update({ params, request, response, auth }: HttpContext) {
     try {
       const userData = await User.findOrFail(params.id)
-      const { first_name, last_name, email, password } = request.only([
+      const { first_name, last_name, email, password, rol } = request.only([
         'first_name',
         'last_name',
         'email',
         'password',
+        'rol',
       ])
 
       userData.merge({
@@ -83,6 +88,10 @@ export default class UsersController {
         email,
         password,
       })
+
+      if (rol && auth.user && auth.user.rol === 'god') {
+        userData.rol = rol
+      }
 
       await userData.save()
 
