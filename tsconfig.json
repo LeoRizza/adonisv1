@@ -1,17 +1,7 @@
 {
+  "extends": "@adonisjs/tsconfig/tsconfig.app.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "es2022",
-    "moduleResolution": "node",
     "rootDir": "./",
-    "outDir": "./build",
-    "strict": false,
-    "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "skipLibCheck": true,
-    "useDefineForClassFields": false
-  },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+    "outDir": "./build"
+  }
 }
