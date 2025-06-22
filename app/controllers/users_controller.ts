@@ -2,112 +2,136 @@ import type { HttpContext } from '@adonisjs/core/http'
 import User from '../models/user.js'
 import hash from '@adonisjs/core/services/hash'
 import Cart from '../models/cart.js'
+import AuditLog from '../models/audit_log.js'
 
 export default class UsersController {
-  /**
-   * Display a list of resource
-   */
-  async index({ response }: HttpContext) {
-    try {
-      const users = await User.all()
+  async index({ auth, response }: HttpContext) {
+    const currentUser = auth.user!
+    if (currentUser.rol === 'user') {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
+
+    if (['employee', 'admin'].includes(currentUser.rol)) {
+      const users = await User.query().where('rol', 'user')
       return response.json(users)
-    } catch (error) {
-      console.error(error)
-      return response.status(500).json({ message: 'Error obteniendo usuarios' })
     }
+
+    const users = await User.all()
+    return response.json(users)
   }
 
-  /**
-   * Handle form submission for the create action
-   */
-  async store({ request, response }: HttpContext) {
-    try {
-      const data = request.only(['first_name', 'last_name', 'email', 'password', 'rol', 'cart'])
-
-      const existe = await User.query().where('email', data.email).first()
-
-      if (!existe) {
-        const newCart = await Cart.create({})
-        data.cart = newCart.id
-
-        const hashedPassword = await hash.make(data.password)
-        data.password = hashedPassword
-
-        const user = await User.create(data)
-        const token = await User.accessTokens.create(user)
-
-        return response.created({
-          user,
-          token: {
-            type: 'bearer',
-            value: token.value!.release(),
-          },
-        })
-      }
+  async store({ auth, request, response }: HttpContext) {
+    const data = request.only(['first_name', 'last_name', 'email', 'password', 'rol'])
+    const existe = await User.query().where('email', data.email).first()
+    if (existe) {
       return response.status(409).json({ message: 'El correo electrónico ya está en uso' })
-    } catch (error) {
-      console.error(error)
-      return response.status(500).json({ message: 'Error al crear el usuario' })
     }
+
+    let role = data.rol || 'user'
+    const currentUser = auth.user
+    if (!currentUser) {
+      role = 'user'
+    } else if (['employee', 'admin'].includes(currentUser.rol)) {
+      role = 'user'
+    } else if (currentUser.rol !== 'god') {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
+
+    const newCart = await Cart.create({})
+    const hashedPassword = await hash.make(data.password)
+    const user = await User.create({
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+      password: hashedPassword,
+      rol: role,
+      cart: String(newCart.id),
+    })
+
+    await AuditLog.create({
+      table_name: 'users',
+      record_id: user.id,
+      action: 'create',
+      user_id: currentUser ? currentUser.id : user.id,
+      data: user,
+    })
+
+    const token = await User.accessTokens.create(user)
+    return response.created({
+      user,
+      token: { type: 'bearer', value: token.value!.release() },
+    })
   }
 
-  /**
-   * Show individual record
-   */
-  async show({ params, response }: HttpContext) {
-    try {
-      const userData = await User.findOrFail(params.id)
-      return response.json(userData)
-    } catch (error) {
-      console.error(error)
-      return response.status(404).json({ message: 'Usuario no encontrado' })
+  async show({ params, auth, response }: HttpContext) {
+    const currentUser = auth.user!
+    const userData = await User.findOrFail(params.id)
+    if (currentUser.rol === 'user' && currentUser.id !== userData.id) {
+      return response.forbidden({ message: 'Acceso denegado' })
     }
+    if (['employee', 'admin'].includes(currentUser.rol) && userData.rol !== 'user') {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
+    return response.json(userData)
   }
 
-  /**
-   * Handle form submission for the edit action
-   */
-  async update({ params, request, response }: HttpContext) {
-    try {
-      const userData = await User.findOrFail(params.id)
-      const { first_name, last_name, email, password } = request.only([
-        'first_name',
-        'last_name',
-        'email',
-        'password',
-      ])
-
-      userData.merge({
-        first_name,
-        last_name,
-        email,
-        password,
-      })
-
-      await userData.save()
-
-      return response.json(userData)
-    } catch (error) {
-      console.error(error)
-      return response.status(500).json({ message: 'Error al actualizar el usuario' })
+  async update({ params, request, auth, response }: HttpContext) {
+    const currentUser = auth.user!
+    const userData = await User.findOrFail(params.id)
+    if (currentUser.rol === 'user' && currentUser.id !== userData.id) {
+      return response.forbidden({ message: 'Acceso denegado' })
     }
+    if (['employee', 'admin'].includes(currentUser.rol) && userData.rol !== 'user') {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
+
+    const { first_name, last_name, email, password, rol } = request.only([
+      'first_name',
+      'last_name',
+      'email',
+      'password',
+      'rol',
+    ])
+
+    userData.merge({ first_name, last_name, email })
+    if (password) {
+      userData.password = await hash.make(password)
+    }
+    if (rol && currentUser.rol === 'god') {
+      userData.rol = rol
+    }
+    await userData.save()
+
+    await AuditLog.create({
+      table_name: 'users',
+      record_id: userData.id,
+      action: 'update',
+      user_id: currentUser.id,
+      data: userData,
+    })
+
+    return response.json(userData)
   }
 
-  /**
-   * Delete record
-   */
-  async destroy({ params, response }: HttpContext) {
-    try {
-      const userData = await User.findOrFail(params.id)
-      if (userData) {
-        userData.delete()
-        return response.status(200).send('Usuario eliminado')
-      } else {
-        return response.badRequest({ message: "no existe el usuario"})
-      }
-    } catch (error) {
-      console.error(error)
-      return response.status(500).json({ message: 'Error al eliminar el usuario' })
+  async destroy({ params, auth, response }: HttpContext) {
+    const currentUser = auth.user!
+    const userData = await User.findOrFail(params.id)
+    if (currentUser.rol === 'user') {
+      return response.forbidden({ message: 'Acceso denegado' })
     }
+    if (['employee', 'admin'].includes(currentUser.rol) && userData.rol !== 'user') {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
+
+    await userData.delete()
+    await AuditLog.create({
+      table_name: 'users',
+      record_id: userData.id,
+      action: 'delete',
+      user_id: currentUser.id,
+      data: userData,
+    })
+
+    return response.status(200).send('Usuario eliminado')
   }
 }
