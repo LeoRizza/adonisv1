@@ -3,13 +3,22 @@ import Inventory from '../models/inventory.js'
 import AuditLog from '../models/audit_log.js'
 
 export default class InventoriesController {
-  async index({ response }: HttpContext) {
-    const items = await Inventory.all()
+  async index({ auth, response }: HttpContext) {
+    const currentUser = auth.user
+    const query = Inventory.query()
+    if (!currentUser || currentUser.rol === 'user') {
+      query.where('online', true)
+    }
+    const items = await query
     return response.json(items)
   }
 
-  async show({ params, response }: HttpContext) {
+  async show({ params, auth, response }: HttpContext) {
+    const currentUser = auth.user
     const item = await Inventory.findOrFail(params.id)
+    if ((!currentUser || currentUser.rol === 'user') && !item.online) {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
     return response.json(item)
   }
 
@@ -18,7 +27,19 @@ export default class InventoriesController {
     if (!['admin', 'god'].includes(user.rol)) {
       return response.forbidden({ message: 'Acceso denegado' })
     }
-    const data = request.only(['name', 'description', 'price', 'stock'])
+    const data = request.only([
+      'barcode',
+      'name',
+      'description',
+      'image',
+      'category',
+      'precio_consumidor_final',
+      'precio_responsable_inscripto',
+      'precio_mayorista',
+      'precio_minorista_diferenciado',
+      'online',
+      'stock',
+    ])
     const item = await Inventory.create(data)
     await AuditLog.create({
       table_name: 'inventories',
@@ -36,7 +57,19 @@ export default class InventoriesController {
       return response.forbidden({ message: 'Acceso denegado' })
     }
     const item = await Inventory.findOrFail(params.id)
-    const data = request.only(['name', 'description', 'price', 'stock'])
+    const data = request.only([
+      'barcode',
+      'name',
+      'description',
+      'image',
+      'category',
+      'precio_consumidor_final',
+      'precio_responsable_inscripto',
+      'precio_mayorista',
+      'precio_minorista_diferenciado',
+      'online',
+      'stock',
+    ])
     item.merge(data)
     await item.save()
     await AuditLog.create({

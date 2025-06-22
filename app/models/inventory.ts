@@ -6,13 +6,34 @@ export default class Inventory extends BaseModel {
   declare id: number
 
   @column()
+  declare barcode: string
+
+  @column()
   declare name: string
 
   @column()
   declare description: string | null
 
   @column()
-  declare price: number
+  declare image: string | null
+
+  @column()
+  declare category: string | null
+
+  @column()
+  declare precio_consumidor_final: number
+
+  @column()
+  declare precio_responsable_inscripto: number
+
+  @column()
+  declare precio_mayorista: number
+
+  @column()
+  declare precio_minorista_diferenciado: number
+
+  @column()
+  declare online: boolean
 
   @column()
   declare stock: number
