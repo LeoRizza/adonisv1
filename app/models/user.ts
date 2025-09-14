@@ -31,7 +31,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare rol: string
 
   @column({ serializeAs: null })
-  declare cart: string
+  declare cart: number
 
   @column()
   declare recoveryToken: string
